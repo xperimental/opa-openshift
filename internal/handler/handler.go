@@ -60,6 +60,8 @@ func New(l log.Logger, c cache.Cacher, wt transport.WrapperFunc, cfg *config.Con
 		}
 		defer r.Body.Close()
 
+		level.Debug(l).Log("msg", "input body", "body", body)
+
 		var req dataRequestV1
 
 		err = json.Unmarshal(body, &req)
