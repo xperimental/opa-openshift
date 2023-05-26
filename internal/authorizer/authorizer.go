@@ -75,7 +75,7 @@ func (a *Authorizer) Authorize(
 		"msg", "executed SubjectAccessReview",
 		"user", user, "groups", fmt.Sprintf("%s", groups),
 		"res", resource, "name", resourceName, "api", apiGroup,
-		"allowed", allowed,
+		"allowed", allowed, "namespace", namespace,
 	)
 
 	switch verb {
