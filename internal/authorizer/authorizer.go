@@ -53,7 +53,7 @@ func New(c openshift.Client, l log.Logger, cc cache.Cacher, matcher *config.Matc
 func (a *Authorizer) Authorize(
 	token,
 	user string, groups []string,
-	verb, resource, resourceName, apiGroup string,
+	verb, resource, resourceName, apiGroup, namespace string,
 ) (types.DataResponseV1, error) {
 	res, ok, err := a.cache.Get(token)
 	if err != nil {
@@ -65,7 +65,7 @@ func (a *Authorizer) Authorize(
 		return res, nil
 	}
 
-	allowed, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup)
+	allowed, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, namespace)
 	if err != nil {
 		return types.DataResponseV1{},
 			&StatusCodeError{fmt.Errorf("failed to authorize subject for auth backend role: %w", err), http.StatusUnauthorized}
