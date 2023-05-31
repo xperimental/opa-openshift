@@ -34,6 +34,7 @@ type Input struct {
 	Resource   string     `json:"resource"`
 	Subject    string     `json:"subject"`
 	Tenant     string     `json:"tenant"`
+	Namespaces []string   `json:"namespaces"`
 }
 
 type dataRequestV1 struct {
@@ -117,7 +118,11 @@ func New(l log.Logger, c cache.Cacher, wt transport.WrapperFunc, cfg *config.Con
 
 		a := authorizer.New(oc, l, c, matcherForRequest)
 
-		res, err := a.Authorize(token, req.Input.Subject, req.Input.Groups, verb, req.Input.Tenant, req.Input.Resource, apiGroup, "")
+		if len(req.Input.Namespaces) == 0 {
+			req.Input.Namespaces = []string{""}
+		}
+
+		res, err := a.Authorize(token, req.Input.Subject, req.Input.Groups, verb, req.Input.Tenant, req.Input.Resource, apiGroup, req.Input.Namespaces[0])
 		if err != nil {
 			statusCode := http.StatusInternalServerError
 			//nolint:errorlint
