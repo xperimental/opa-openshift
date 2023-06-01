@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-kit/kit/log"
@@ -53,7 +52,8 @@ func New(c openshift.Client, l log.Logger, cc cache.Cacher, matcher *config.Matc
 func (a *Authorizer) Authorize(
 	token,
 	user string, groups []string,
-	verb, resource, resourceName, apiGroup, namespace string,
+	verb, resource, resourceName, apiGroup string,
+	namespaces []string,
 ) (types.DataResponseV1, error) {
 	res, ok, err := a.cache.Get(token)
 	if err != nil {
@@ -65,50 +65,30 @@ func (a *Authorizer) Authorize(
 		return res, nil
 	}
 
-	allowed, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, namespace)
-	if err != nil {
-		return types.DataResponseV1{},
-			&StatusCodeError{fmt.Errorf("failed to authorize subject for auth backend role: %w", err), http.StatusUnauthorized}
-	}
-
-	level.Debug(a.logger).Log(
-		"msg", "executed SubjectAccessReview",
-		"user", user, "groups", fmt.Sprintf("%s", groups),
-		"res", resource, "name", resourceName, "api", apiGroup,
-		"allowed", allowed, "namespace", namespace,
-	)
-
-	switch verb {
-	case GetVerb:
-		ns, err := a.client.ListNamespaces()
-		if err != nil {
-			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
-		}
-		if len(ns) == 0 {
-			// Explicitly disallow a user query with no allowed namespaces
-			allowed = false
-		}
-		level.Debug(a.logger).Log("msg", "executed ListNamespaces", "allowed", allowed)
-		res, err = newDataResponseV1(allowed, ns, a.matcher)
+	allowed := []string{}
+	for _, ns := range namespaces {
+		nsAllowed, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, ns)
 		if err != nil {
 			return types.DataResponseV1{},
-				&StatusCodeError{fmt.Errorf("failed to create a new authorization response: %w", err), http.StatusInternalServerError}
+				&StatusCodeError{fmt.Errorf("failed to authorize subject for auth backend role: %w", err), http.StatusUnauthorized}
 		}
-	case CreateVerb:
-		// No namespace check needed as there won't be a query injection
-		res = minimalDataResponseV1(allowed)
-	default:
-		// Verb was already validated in handler; at this step, an unexpected verb is a bug
-		return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("unexpected verb: %s", verb), http.StatusInternalServerError}
+		level.Debug(a.logger).Log(
+			"msg", "executed SubjectAccessReview",
+			"user", user, "groups", fmt.Sprintf("%s", groups),
+			"res", resource, "name", resourceName, "api", apiGroup,
+			"allowed", allowed, "namespace", ns,
+		)
+
+		if nsAllowed {
+			allowed = append(allowed, ns)
+		}
 	}
 
-	err = a.cache.Set(token, res)
-	if err != nil {
-		return types.DataResponseV1{},
-			&StatusCodeError{fmt.Errorf("failed to store authorization response into cache: %w", err), http.StatusInternalServerError}
+	if len(allowed) == 0 {
+		return minimalDataResponseV1(false), nil
 	}
 
-	return res, nil
+	return newDataResponseV1(allowed, a.matcher)
 }
 
 func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
@@ -117,9 +97,9 @@ func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
 	return types.DataResponseV1{Result: &res}
 }
 
-func newDataResponseV1(allowed bool, ns []string, matcher *config.Matcher) (types.DataResponseV1, error) {
+func newDataResponseV1(ns []string, matcher *config.Matcher) (types.DataResponseV1, error) {
 	if matcher.IsEmpty() {
-		return minimalDataResponseV1(allowed), nil
+		return minimalDataResponseV1(true), nil
 	}
 
 	matchers := []*labels.Matcher{}
@@ -140,7 +120,7 @@ func newDataResponseV1(allowed bool, ns []string, matcher *config.Matcher) (type
 	}
 
 	var res interface{} = map[string]string{
-		"allowed": strconv.FormatBool(allowed),
+		"allowed": "true",
 		"data":    string(data),
 	}
 
