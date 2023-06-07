@@ -71,6 +71,19 @@ func (a *Authorizer) Authorize(
 		return res, nil
 	}
 
+	if verb == GetVerb && len(namespaces) == 1 && namespaces[0] == "" {
+		// cluster-scoped query -> populate list of namespaces by listing user namespaces
+		nsList, err := a.client.ListNamespaces()
+		if err != nil {
+			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
+		}
+		level.Debug(a.logger).Log("msg", "executed ListNamespaces", "namespaces", fmt.Sprintf("%s", nsList))
+
+		if len(nsList) > 0 {
+			namespaces = nsList
+		}
+	}
+
 	allowed := []string{}
 	for _, ns := range namespaces {
 		nsAllowed, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, ns)
@@ -88,34 +101,6 @@ func (a *Authorizer) Authorize(
 		if nsAllowed {
 			allowed = append(allowed, ns)
 		}
-	}
-
-	if verb == GetVerb {
-		nsList, err := a.client.ListNamespaces()
-		if err != nil {
-			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
-		}
-		level.Debug(a.logger).Log("msg", "executed ListNamespaces", "namespaces", fmt.Sprintf("%s", nsList))
-
-		if len(allowed) == 1 && allowed[0] == "" && len(nsList) > 0 {
-			// cluster-scoped query -> replace allow-list with list of namespaces (for example: labels call)
-			allowed = nsList
-		} else {
-			// namespaced query -> inner-join of namespace list and allowed namespaces
-			nsMap := map[string]bool{}
-			for _, ns := range nsList {
-				nsMap[ns] = true
-			}
-
-			filtered := []string{}
-			for _, ns := range allowed {
-				if nsMap[ns] {
-					filtered = append(filtered, ns)
-				}
-			}
-			allowed = filtered
-		}
-		level.Debug(a.logger).Log("msg", "filtered namespace list", "namespaces", fmt.Sprintf("%s", allowed))
 	}
 
 	if len(allowed) == 0 {
