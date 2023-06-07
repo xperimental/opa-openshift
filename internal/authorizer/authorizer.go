@@ -90,6 +90,18 @@ func (a *Authorizer) Authorize(
 		}
 	}
 
+	if verb == GetVerb && len(allowed) == 1 && allowed[0] == "" {
+		ns, err := a.client.ListNamespaces()
+		if err != nil {
+			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
+		}
+		level.Debug(a.logger).Log("msg", "executed ListNamespaces", "namespaces", fmt.Sprintf("%s", ns))
+
+		if len(ns) > 0 {
+			allowed = ns
+		}
+	}
+
 	if len(allowed) == 0 {
 		res = minimalDataResponseV1(false)
 	} else {
