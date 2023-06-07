@@ -55,7 +55,9 @@ func (a *Authorizer) Authorize(
 	verb, resource, resourceName, apiGroup string,
 	namespaces []string,
 ) (types.DataResponseV1, error) {
-	res, ok, err := a.cache.Get(token)
+	cacheKey := token
+
+	res, ok, err := a.cache.Get(cacheKey)
 	if err != nil {
 		return types.DataResponseV1{},
 			&StatusCodeError{fmt.Errorf("failed to fetch authorization response from cache: %w", err), http.StatusInternalServerError}
@@ -85,10 +87,17 @@ func (a *Authorizer) Authorize(
 	}
 
 	if len(allowed) == 0 {
-		return minimalDataResponseV1(false), nil
+		res = minimalDataResponseV1(false)
+	} else {
+		res, err = newDataResponseV1(allowed, a.matcher)
+		if err != nil {
+			return types.DataResponseV1{},
+				&StatusCodeError{fmt.Errorf("failed to create auth response: %w", err), http.StatusInternalServerError}
+		}
 	}
 
-	return newDataResponseV1(allowed, a.matcher)
+	a.cache.Set(cacheKey, res)
+	return res, nil
 }
 
 func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
