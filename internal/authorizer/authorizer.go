@@ -55,7 +55,11 @@ func (a *Authorizer) Authorize(
 	verb, resource, resourceName, apiGroup string,
 	namespaces []string,
 ) (types.DataResponseV1, error) {
-	cacheKey := token
+	cacheKey := strings.Join([]string{
+		token,
+		verb, resource, resourceName, apiGroup,
+		strings.Join(namespaces, ","),
+	}, ":")
 
 	res, ok, err := a.cache.Get(cacheKey)
 	if err != nil {
