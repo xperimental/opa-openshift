@@ -71,6 +71,20 @@ func (a *Authorizer) Authorize(
 		return res, nil
 	}
 
+	res, err = a.authorizeInner(user, groups, verb, resource, resourceName, apiGroup, namespaces)
+	if err != nil {
+		return types.DataResponseV1{}, err
+	}
+
+	a.cache.Set(cacheKey, res)
+	return res, nil
+}
+
+func (a *Authorizer) authorizeInner(
+	user string, groups []string,
+	verb, resource, resourceName, apiGroup string,
+	namespaces []string,
+) (types.DataResponseV1, error) {
 	if verb == GetVerb && len(namespaces) == 1 && namespaces[0] == "" {
 		// cluster-scoped query -> populate list of namespaces by listing user namespaces
 		nsList, err := a.client.ListNamespaces()
@@ -104,16 +118,15 @@ func (a *Authorizer) Authorize(
 	}
 
 	if len(allowed) == 0 {
-		res = minimalDataResponseV1(false)
-	} else {
-		res, err = newDataResponseV1(allowed, a.matcher)
-		if err != nil {
-			return types.DataResponseV1{},
-				&StatusCodeError{fmt.Errorf("failed to create auth response: %w", err), http.StatusInternalServerError}
-		}
+		return minimalDataResponseV1(false), nil
 	}
 
-	a.cache.Set(cacheKey, res)
+	res, err := newDataResponseV1(allowed, a.matcher)
+	if err != nil {
+		return types.DataResponseV1{},
+			&StatusCodeError{fmt.Errorf("failed to create auth response: %w", err), http.StatusInternalServerError}
+	}
+
 	return res, nil
 }
 
