@@ -85,18 +85,14 @@ func (a *Authorizer) authorizeInner(
 	verb, resource, resourceName, apiGroup string,
 	namespaces []string,
 ) (types.DataResponseV1, error) {
-	if len(namespaces) == 0 {
-		// request does not contain namespaces -> check if user has cluster-wide access
-		clusterAllow, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, "")
-		if err != nil {
-			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("cluster-wide SAR failed: %w", err), http.StatusUnauthorized}
-		}
+	// check if user has cluster-wide access
+	clusterAllow, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, "")
+	if err != nil {
+		return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("cluster-wide SAR failed: %w", err), http.StatusUnauthorized}
+	}
 
-		if !clusterAllow {
-			// user does not have cluster-wide access -> deny
-			return minimalDataResponseV1(false), nil
-		}
-
+	if clusterAllow {
+		// user has cluster-wide access -> per-namespace check is not meaningful (always successful)
 		if a.matcher.IsEmpty() {
 			// user has cluster-wide access and does not need matcher -> allow
 			return minimalDataResponseV1(true), nil
@@ -114,7 +110,25 @@ func (a *Authorizer) authorizeInner(
 			return minimalDataResponseV1(false), nil
 		}
 
-		namespaces = nsList
+		if len(namespaces) == 0 {
+			// request was cluster-scoped, return matcher with all accessible namespaces
+			return newDataResponseV1(nsList, a.matcher)
+		}
+
+		nsMap := map[string]bool{}
+		for _, ns := range nsList {
+			nsMap[ns] = true
+		}
+
+		filtered := []string{}
+		for _, ns := range namespaces {
+			if nsMap[ns] {
+				filtered = append(filtered, ns)
+			}
+		}
+
+		// replace request namespaces by filtered list (might be empty)
+		namespaces = filtered
 	}
 
 	allowed := []string{}
