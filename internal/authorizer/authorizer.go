@@ -98,42 +98,7 @@ func (a *Authorizer) authorizeInner(
 
 	if clusterAllow {
 		// user has cluster-wide access -> per-namespace check is not meaningful (always successful)
-		if a.matcher.IsEmpty() {
-			// user has cluster-wide access and does not need matcher -> allow
-			return minimalDataResponseV1(true), nil
-		}
-
-		// user has cluster-wide access but needs a matcher -> populate namespaces from API list
-		nsList, err := a.client.ListNamespaces()
-		if err != nil {
-			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
-		}
-		level.Debug(a.logger).Log("msg", "executed ListNamespaces", "namespaces", fmt.Sprintf("%s", nsList))
-
-		if len(nsList) == 0 {
-			// list of namespaces is empty -> deny
-			return minimalDataResponseV1(false), nil
-		}
-
-		if len(namespaces) == 0 {
-			// request was cluster-scoped, return matcher with all accessible namespaces
-			return newDataResponseV1(nsList, a.matcher)
-		}
-
-		nsMap := map[string]bool{}
-		for _, ns := range nsList {
-			nsMap[ns] = true
-		}
-
-		filtered := []string{}
-		for _, ns := range namespaces {
-			if nsMap[ns] {
-				filtered = append(filtered, ns)
-			}
-		}
-
-		// cluster-scoped SAR was successful, so namespaced SARs will be successful as well -> return matcher
-		return newDataResponseV1(filtered, a.matcher)
+		return a.authorizeClusterWide(namespaces)
 	}
 
 	allowed := []string{}
@@ -168,6 +133,45 @@ func (a *Authorizer) authorizeInner(
 	}
 
 	return res, nil
+}
+
+func (a *Authorizer) authorizeClusterWide(namespaces []string) (types.DataResponseV1, error) {
+	if a.matcher.IsEmpty() {
+		// user has cluster-wide access and does not need matcher -> allow
+		return minimalDataResponseV1(true), nil
+	}
+
+	// user has cluster-wide access but needs a matcher -> populate namespaces from API list
+	nsList, err := a.client.ListNamespaces()
+	if err != nil {
+		return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
+	}
+	level.Debug(a.logger).Log("msg", "executed ListNamespaces", "namespaces", fmt.Sprintf("%s", nsList))
+
+	if len(nsList) == 0 {
+		// list of namespaces is empty -> deny
+		return minimalDataResponseV1(false), nil
+	}
+
+	if len(namespaces) == 0 {
+		// request was cluster-scoped, return matcher with all accessible namespaces
+		return newDataResponseV1(nsList, a.matcher)
+	}
+
+	nsMap := map[string]bool{}
+	for _, ns := range nsList {
+		nsMap[ns] = true
+	}
+
+	filtered := []string{}
+	for _, ns := range namespaces {
+		if nsMap[ns] {
+			filtered = append(filtered, ns)
+		}
+	}
+
+	// cluster-scoped SAR was successful, so namespaced SARs will be successful as well -> return matcher
+	return newDataResponseV1(filtered, a.matcher)
 }
 
 func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
