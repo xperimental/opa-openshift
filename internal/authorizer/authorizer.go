@@ -97,6 +97,22 @@ func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource
 		return a.authorizeClusterWide(namespaces)
 	}
 
+	level.Debug(a.logger).Log("msg", "namespaced authorization for path", "path", path)
+	if isMetaRequest(path) && len(namespaces) == 0 {
+		// Only a metadata request and no namespaces provided -> populate with API list
+		nsList, err := a.client.ListNamespaces()
+		if err != nil {
+			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
+		}
+
+		if len(nsList) == 0 {
+			// list of namespaces is empty -> deny
+			return minimalDataResponseV1(false), nil
+		}
+
+		namespaces = nsList
+	}
+
 	allowed := []string{}
 	for _, ns := range namespaces {
 		nsAllowed, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, ns)
@@ -168,6 +184,11 @@ func (a *Authorizer) authorizeClusterWide(namespaces []string) (types.DataRespon
 
 	// cluster-scoped SAR was successful, so namespaced SARs will be successful as well -> return matcher
 	return newDataResponseV1(filtered, a.matcher)
+}
+
+func isMetaRequest(path string) bool {
+	return strings.HasPrefix(path, "/loki/api/v1/labels") ||
+		(strings.HasPrefix(path, "/loki/api/v1/label/") && strings.HasSuffix(path, "/values"))
 }
 
 func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
