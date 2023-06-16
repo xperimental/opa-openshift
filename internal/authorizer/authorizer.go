@@ -91,6 +91,11 @@ func (a *Authorizer) authorizeInner(
 		return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("cluster-wide SAR failed: %w", err), http.StatusUnauthorized}
 	}
 
+	if verb == CreateVerb {
+		// No namespaced checks for log collection -> allow based on cluster-wide check
+		return minimalDataResponseV1(clusterAllow), nil
+	}
+
 	if clusterAllow {
 		// user has cluster-wide access -> per-namespace check is not meaningful (always successful)
 		if a.matcher.IsEmpty() {
