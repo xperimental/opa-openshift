@@ -97,13 +97,19 @@ func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource
 		return a.authorizeClusterWide(namespaces)
 	}
 
-	level.Debug(a.logger).Log("msg", "namespaced authorization for path", "path", path)
+	level.Debug(a.logger).Log("msg", "namespaced authorization",
+		"path", path,
+		"namespaces", fmt.Sprintf("%s", namespaces),
+	)
 	if isMetaRequest(path) && len(namespaces) == 0 {
 		// Only a metadata request and no namespaces provided -> populate with API list
 		nsList, err := a.client.ListNamespaces()
 		if err != nil {
 			return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
 		}
+		level.Debug(a.logger).Log("msg", "list namespaces for meta request",
+			"namespaces", fmt.Sprintf("%s", nsList),
+		)
 
 		if len(nsList) == 0 {
 			// list of namespaces is empty -> deny
