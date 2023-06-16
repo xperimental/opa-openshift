@@ -86,6 +86,12 @@ func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource
 	if err != nil {
 		return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("cluster-wide SAR failed: %w", err), http.StatusUnauthorized}
 	}
+	level.Debug(a.logger).Log(
+		"msg", "cluster-scoped SubjectAccessReview",
+		"user", user, "groups", fmt.Sprintf("%s", groups),
+		"res", resource, "name", resourceName, "api", apiGroup,
+		"allowed", clusterAllow,
+	)
 
 	if verb == CreateVerb {
 		// No namespaced checks for log collection -> allow based on cluster-wide check
@@ -97,13 +103,7 @@ func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource
 		return a.authorizeClusterWide(namespaces)
 	}
 
-	isMeta := isMetaRequest(path)
-	level.Debug(a.logger).Log("msg", "namespaced authorization",
-		"path", path,
-		"namespaces", fmt.Sprintf("%s", namespaces),
-		"isMetaRequest", isMeta,
-	)
-	if isMeta && len(namespaces) == 0 {
+	if isMetaRequest(path) && len(namespaces) == 0 {
 		// Only a metadata request and no namespaces provided -> populate with API list
 		nsList, err := a.client.ListNamespaces()
 		if err != nil {
@@ -129,7 +129,7 @@ func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource
 				&StatusCodeError{fmt.Errorf("failed to authorize subject for auth backend role: %w", err), http.StatusUnauthorized}
 		}
 		level.Debug(a.logger).Log(
-			"msg", "executed SubjectAccessReview",
+			"msg", "namespace-scoped SubjectAccessReview",
 			"user", user, "groups", fmt.Sprintf("%s", groups),
 			"res", resource, "name", resourceName, "api", apiGroup,
 			"allowed", nsAllowed, "namespace", ns,
@@ -166,7 +166,6 @@ func (a *Authorizer) authorizeClusterWide(namespaces []string) (types.DataRespon
 	if err != nil {
 		return types.DataResponseV1{}, &StatusCodeError{fmt.Errorf("failed to access api server: %w", err), http.StatusUnauthorized}
 	}
-	level.Debug(a.logger).Log("msg", "executed ListNamespaces", "namespaces", fmt.Sprintf("%s", nsList))
 
 	if len(nsList) == 0 {
 		// list of namespaces is empty -> deny
@@ -195,15 +194,8 @@ func (a *Authorizer) authorizeClusterWide(namespaces []string) (types.DataRespon
 }
 
 func isMetaRequest(path string) bool {
-	if path == "/loki/api/v1/labels" {
-		return true
-	}
-
-	if strings.HasPrefix(path, "/loki/api/v1/label/") && strings.HasSuffix(path, "/values") {
-		return true
-	}
-
-	return false
+	return path == "/loki/api/v1/labels" ||
+		(strings.HasPrefix(path, "/loki/api/v1/label/") && strings.HasSuffix(path, "/values"))
 }
 
 func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
