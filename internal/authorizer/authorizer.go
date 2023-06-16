@@ -132,8 +132,8 @@ func (a *Authorizer) authorizeInner(
 			}
 		}
 
-		// replace request namespaces by filtered list (might be empty)
-		namespaces = filtered
+		// cluster-scoped SAR was successful, so namespaced SARs will be successful as well -> return matcher
+		return newDataResponseV1(filtered, a.matcher)
 	}
 
 	allowed := []string{}
