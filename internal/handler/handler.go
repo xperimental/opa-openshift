@@ -117,10 +117,6 @@ func New(l log.Logger, c cache.Cacher, wt transport.WrapperFunc, cfg *config.Con
 
 		a := authorizer.New(oc, l, c, matcherForRequest)
 
-		if len(req.Input.Namespaces) == 0 {
-			req.Input.Namespaces = []string{""}
-		}
-
 		res, err := a.Authorize(token, req.Input.Subject, req.Input.Groups, verb, req.Input.Tenant, req.Input.Resource, apiGroup, req.Input.Namespaces, req.Input.Path)
 		if err != nil {
 			statusCode := http.StatusInternalServerError
