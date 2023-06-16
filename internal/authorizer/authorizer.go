@@ -97,11 +97,13 @@ func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource
 		return a.authorizeClusterWide(namespaces)
 	}
 
+	isMeta := isMetaRequest(path)
 	level.Debug(a.logger).Log("msg", "namespaced authorization",
 		"path", path,
 		"namespaces", fmt.Sprintf("%s", namespaces),
+		"isMetaRequest", isMeta,
 	)
-	if isMetaRequest(path) && len(namespaces) == 0 {
+	if isMeta && len(namespaces) == 0 {
 		// Only a metadata request and no namespaces provided -> populate with API list
 		nsList, err := a.client.ListNamespaces()
 		if err != nil {
@@ -193,8 +195,15 @@ func (a *Authorizer) authorizeClusterWide(namespaces []string) (types.DataRespon
 }
 
 func isMetaRequest(path string) bool {
-	return strings.HasPrefix(path, "/loki/api/v1/labels") ||
-		(strings.HasPrefix(path, "/loki/api/v1/label/") && strings.HasSuffix(path, "/values"))
+	if path == "/loki/api/v1/labels" {
+		return true
+	}
+
+	if strings.HasPrefix(path, "/loki/api/v1/label/") && strings.HasSuffix(path, "/values") {
+		return true
+	}
+
+	return false
 }
 
 func minimalDataResponseV1(allowed bool) types.DataResponseV1 {
