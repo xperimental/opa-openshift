@@ -53,7 +53,7 @@ func (a *Authorizer) Authorize(
 	token,
 	user string, groups []string,
 	verb, resource, resourceName, apiGroup string,
-	namespaces []string,
+	namespaces []string, path string,
 ) (types.DataResponseV1, error) {
 	cacheKey := strings.Join([]string{
 		token,
@@ -71,7 +71,7 @@ func (a *Authorizer) Authorize(
 		return res, nil
 	}
 
-	res, err = a.authorizeInner(user, groups, verb, resource, resourceName, apiGroup, namespaces)
+	res, err = a.authorizeInner(user, groups, verb, resource, resourceName, apiGroup, namespaces, path)
 	if err != nil {
 		return types.DataResponseV1{}, err
 	}
@@ -80,11 +80,7 @@ func (a *Authorizer) Authorize(
 	return res, nil
 }
 
-func (a *Authorizer) authorizeInner(
-	user string, groups []string,
-	verb, resource, resourceName, apiGroup string,
-	namespaces []string,
-) (types.DataResponseV1, error) {
+func (a *Authorizer) authorizeInner(user string, groups []string, verb, resource, resourceName, apiGroup string, namespaces []string, path string) (types.DataResponseV1, error) {
 	// check if user has cluster-wide access
 	clusterAllow, err := a.client.SubjectAccessReview(user, groups, verb, resource, resourceName, apiGroup, "")
 	if err != nil {
