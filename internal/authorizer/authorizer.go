@@ -61,6 +61,7 @@ func (a *Authorizer) Authorize(
 		path,
 	}, ":")
 
+	level.Debug(a.logger).Log("msg", "looking up in cache", "cachekey", cacheKey)
 	res, ok, err := a.cache.Get(cacheKey)
 	if err != nil {
 		return types.DataResponseV1{},
@@ -68,6 +69,7 @@ func (a *Authorizer) Authorize(
 	}
 
 	if ok {
+		level.Debug(a.logger).Log("msg", "cache hit", "cachekey", cacheKey)
 		return res, nil
 	}
 
