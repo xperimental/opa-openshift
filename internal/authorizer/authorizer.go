@@ -56,9 +56,9 @@ func (a *Authorizer) Authorize(
 	namespaces []string, path string,
 ) (types.DataResponseV1, error) {
 	cacheKey := strings.Join([]string{
-		token,
-		verb, resource, resourceName, apiGroup,
-		strings.Join(namespaces, ","),
+		user, fmt.Sprintf("%s", groups),
+		verb, resource, resourceName, apiGroup, fmt.Sprintf("%s", namespaces),
+		path,
 	}, ":")
 
 	res, ok, err := a.cache.Get(cacheKey)
