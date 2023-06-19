@@ -78,7 +78,10 @@ func (a *Authorizer) Authorize(
 		return types.DataResponseV1{}, err
 	}
 
-	a.cache.Set(cacheKey, res)
+	if err := a.cache.Set(cacheKey, res); err != nil {
+		level.Warn(a.logger).Log("msg", fmt.Sprintf("failed to save cached response: %s", err), "cachekey", cacheKey)
+	}
+
 	return res, nil
 }
 
