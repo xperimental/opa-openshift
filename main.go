@@ -57,12 +57,14 @@ func main() {
 	healthchecks := healthcheck.NewMetricsHandler(healthcheck.NewHandler(), reg)
 
 	var mc cache.Cacher
-
 	if len(cfg.Memcached.Servers) > 0 {
 		mc = cache.NewMemached(context.Background(), cfg.Memcached.Interval, cfg.Memcached.Expire, cfg.Memcached.Servers...)
 	} else {
 		mc = cache.NewInMemoryCache(cfg.Memcached.Expire)
 	}
+
+	cacheWithMetrics := cache.NewMetrics(mc)
+	reg.MustRegister(cacheWithMetrics)
 
 	wt := func(rt http.RoundTripper) http.RoundTripper {
 		return rti.NewRoundTripper("openshift", rt)
@@ -73,7 +75,7 @@ func main() {
 
 	l := log.With(logger, "component", "authorizer")
 	m := http.NewServeMux()
-	m.HandleFunc(p, hi.NewHandler(prometheus.Labels{"handler": "data"}, handler.New(l, mc, wt, cfg)))
+	m.HandleFunc(p, hi.NewHandler(prometheus.Labels{"handler": "data"}, handler.New(l, cacheWithMetrics, wt, cfg)))
 
 	if cfg.Server.HealthcheckURL != "" {
 		minVer, err := flag.TLSVersion(cfg.TLS.MinVersion)
